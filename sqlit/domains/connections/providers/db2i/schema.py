@@ -1,6 +1,8 @@
 """Connection schema for IBM DB2 for i."""
 
 from sqlit.domains.connections.providers.schema_helpers import (
+    FieldType,
+    SelectOption,
     SSH_FIELDS,
     ConnectionSchema,
     SchemaField,
@@ -31,6 +33,17 @@ SCHEMA = ConnectionSchema(
             placeholder="IBM i Access ODBC Driver",
             required=False,
             description="Name of the ODBC driver to use (default: IBM i Access ODBC Driver)",
+        ),
+        SchemaField(
+            name="naming",
+            label="Naming",
+            field_type=FieldType.DROPDOWN,
+            options=(
+                SelectOption("sql", "SQL (LIB.TABLE)"),
+                SelectOption("system", "System (LIB/TABLE)"),
+            ),
+            default="sql",
+            description="SQL naming uses LIB.TABLE; system naming uses LIB/TABLE and the library list",
         ),
     )
     + SSH_FIELDS,

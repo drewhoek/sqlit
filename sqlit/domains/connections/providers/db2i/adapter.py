@@ -74,7 +74,7 @@ class Db2iAdapter(CursorBasedAdapter):
             raise ValueError("DB2 for i connections require a TCP-style endpoint.")
         
         # Get optional driver name from config, default to IBM i Access ODBC Driver
-        driver_name = config.get_option("odbc_driver", "IBM i Access ODBC Driver")
+        driver_name = config.get_option("odbc_driver") or "IBM i Access ODBC Driver"
         
         # Build ODBC connection string
         # Format: DRIVER={driver};SYSTEM=hostname;UID=user;PWD=password;
@@ -97,8 +97,13 @@ class Db2iAdapter(CursorBasedAdapter):
         if endpoint.database:
             conn_str_parts.append(f"DBQ={endpoint.database}")
         
+        if config.get_option("naming", "sql") == "system":
+            conn_str_parts.append("NAM=1")
+
         # Add any extra options from config
         for key, value in config.extra_options.items():
+            if key in ("odbc_driver", "naming"):
+                continue
             conn_str_parts.append(f"{key}={value}")
         
         conn_str = ";".join(conn_str_parts) + ";"

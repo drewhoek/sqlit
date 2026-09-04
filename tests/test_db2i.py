@@ -1,19 +1,20 @@
-"""Integration tests for IBM DB2 for i database operations."""
+"""Integration tests for IBM Db2 for i database operations."""
 
-import pytest
+from __future__ import annotations
 
-from tests.helpers import BaseDatabaseTests
+from .test_database_base import BaseDatabaseTests, DatabaseTestConfig
 
 
-@pytest.mark.db2i
 class TestDb2iIntegration(BaseDatabaseTests):
-    """Integration tests for IBM DB2 for i database operations via CLI."""
+    """Integration tests for IBM Db2 for i database operations via CLI."""
 
-    @pytest.fixture(scope="class")
-    def db_spec(self):
-        return dict(
+    @property
+    def config(self) -> DatabaseTestConfig:
+        return DatabaseTestConfig(
             db_type="db2i",
-            display_name="IBM DB2 for i",
+            display_name="IBM Db2 for i",
             connection_fixture="db2i_connection",
             db_fixture="db2i_db",
+            create_connection_args=lambda: [],
+            uses_limit=False,
         )
