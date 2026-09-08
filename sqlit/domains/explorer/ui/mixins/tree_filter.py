@@ -149,11 +149,31 @@ class TreeFilterMixin:
             self._select_and_activate_after_refresh(fresh_node)
 
     def _select_and_activate_after_refresh(self: TreeFilterMixinHost, node: Any) -> None:
+        # The snapshot restore put every ancestor back into its filter-open
+        # state, which is often collapsed — the filter only expanded them in
+        # the filtered view. Re-expand so the accepted node is actually
+        # visible; expanding an already-populated node is a no-op in
+        # on_tree_node_expanded, so this does not trigger a reload.
+        self._expand_ancestors(node)
         try:
             self.object_tree.move_cursor(node)
         except Exception:
             pass
         self._activate_tree_node(node)
+
+        # Mirror what Enter does on a highlighted node (Textual's toggle):
+        # expand tables to their columns, folders to their contents,
+        # databases to "use" them. Connections/saved queries are handled by
+        # _activate_tree_node above.
+        kind_getter = getattr(getattr(node, "data", None), "get_node_kind", None)
+        kind = str(kind_getter()) if callable(kind_getter) else ""
+        if kind in ("connection", "saved_query_file"):
+            return
+        if getattr(node, "allow_expand", False) and not getattr(node, "is_expanded", False):
+            try:
+                node.expand()
+            except Exception:
+                pass
 
     def _find_node_by_data(self: TreeFilterMixinHost, data: Any) -> Any | None:
         """Locate the node in the current tree whose `.data` is `data`."""

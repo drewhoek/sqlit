@@ -464,3 +464,71 @@ class TestCursorPositionAfterFilterAccept:
             "Cursor ended up on the wrong node after accept. "
             f"Expected 'test-server', got: {cursor.data.get_label_text() if cursor.data else None}"
         )
+
+
+class TestFilterAcceptActivatesMatch:
+    """Enter on a filter match must leave the user *on* that node, visibly,
+    and act like Enter does on a highlighted node.
+
+    The snapshot restore in action_tree_filter_close puts every ancestor
+    back into its filter-open state. If the Tables folder was collapsed
+    when `/` was pressed, the accepted table ended up under a collapsed
+    parent: the cursor moved to an invisible row and nothing appeared to
+    happen — the filter just closed.
+    """
+
+    def _open_filter(self, host: _MultiDbFilterHost) -> None:
+        TreeFilterMixin.action_tree_filter(host)  # type: ignore[arg-type]
+
+    def _type(self, host: _MultiDbFilterHost, text: str) -> None:
+        for ch in text:
+            host._tree_filter_text += ch
+            TreeFilterMixin._update_tree_filter(host)  # type: ignore[arg-type]
+
+    def _tables_folder(self, host: _MultiDbFilterHost) -> MockTreeNode:
+        conn = host.object_tree.root.children[0]
+        dbs_folder = conn.children[0]
+        db_node = dbs_folder.children[0]
+        return db_node.children[0]
+
+    def test_accept_expands_collapsed_ancestors_and_toggles_match(self):
+        host = _MultiDbFilterHost(
+            "server",
+            ["sales"],
+            {"sales": ["orders", "customers"]},
+        )
+        # Tables were loaded earlier, then the user collapsed the folder
+        # before opening the filter.
+        self._tables_folder(host).collapse()
+        assert self._tables_folder(host).is_expanded is False
+
+        self._open_filter(host)
+        self._type(host, "cust")
+        assert [n.data.get_label_text() for n in host._tree_filter_matches] == ["customers"]
+
+        TreeFilterMixin.action_tree_filter_accept(host)  # type: ignore[arg-type]
+
+        cursor = host.object_tree.selected_node
+        assert cursor is not None and host.object_tree.is_node_in_tree(cursor)
+        assert cursor.data.get_label_text() == "customers"
+
+        # Every ancestor is expanded again, so the cursor row is visible.
+        ancestor = cursor.parent
+        while ancestor is not None and ancestor is not host.object_tree.root:
+            assert ancestor.is_expanded, f"ancestor {ancestor.label!r} left collapsed"
+            ancestor = ancestor.parent
+
+        # And the match itself was toggled open, like Enter on a table.
+        assert cursor.is_expanded is True
+
+    def test_accept_does_not_toggle_connection_nodes(self):
+        host = _FilterHost(["alpha", "test-server"])
+        self._open_filter(host)  # type: ignore[arg-type]
+        self._type(host, "test")  # type: ignore[arg-type]
+
+        TreeFilterMixin.action_tree_filter_accept(host)  # type: ignore[arg-type]
+
+        cursor = host.object_tree.selected_node
+        assert cursor is not None and cursor.data.get_label_text() == "test-server"
+        # Connections are activated via _activate_tree_node (connect), not expanded.
+        assert cursor.is_expanded is False
