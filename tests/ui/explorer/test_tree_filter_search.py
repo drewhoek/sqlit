@@ -12,6 +12,7 @@ Scenario:
 
 from __future__ import annotations
 
+import re
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -61,12 +62,14 @@ class MockTree:
         self.root = MockTreeNode("root")
         self.has_focus = True
         self.selected_node: MockTreeNode | None = None
+        self.cursor_node: MockTreeNode | None = None
 
     def select_node(self, node: MockTreeNode) -> None:
         self.selected_node = node
 
     def move_cursor(self, node: MockTreeNode) -> None:
         self.selected_node = node
+        self.cursor_node = node
 
     def focus(self) -> None:
         self.has_focus = True
@@ -532,3 +535,77 @@ class TestFilterAcceptActivatesMatch:
         assert cursor is not None and cursor.data.get_label_text() == "test-server"
         # Connections are activated via _activate_tree_node (connect), not expanded.
         assert cursor.is_expanded is False
+
+
+class TestFilterRevealsAndSelects:
+    """Typing must reveal *every* match, the cursor must sit on a match, Enter
+    must take the highlighted row, and highlighting must not rewrite labels."""
+
+    def _open_filter(self, host) -> None:
+        TreeFilterMixin.action_tree_filter(host)  # type: ignore[arg-type]
+
+    def _type(self, host, text: str) -> None:
+        for ch in text:
+            host._tree_filter_text += ch
+            TreeFilterMixin._update_tree_filter(host)  # type: ignore[arg-type]
+
+    def _ancestors_expanded(self, host, node) -> bool:
+        cur = node.parent
+        while cur is not None and cur is not host.object_tree.root:
+            if not cur.is_expanded:
+                return False
+            cur = cur.parent
+        return True
+
+    def test_typing_reveals_matches_in_every_database(self):
+        host = _MultiDbFilterHost(
+            "server",
+            ["sales", "hr"],
+            {"sales": ["orders", "order_lines"], "hr": ["order_history", "people"]},
+        )
+        # Both Tables folders collapsed before filtering (as after a fresh load).
+        for db in host.object_tree.root.children[0].children[0].children:
+            for folder in db.children:
+                folder.collapse()
+
+        self._open_filter(host)
+        self._type(host, "order")
+
+        names = sorted(n.data.get_label_text() for n in host._tree_filter_matches)
+        assert names == ["order_history", "order_lines", "orders"]
+        for match in host._tree_filter_matches:
+            assert self._ancestors_expanded(host, match), f"{match.label} hidden under a collapsed ancestor"
+        # Cursor sits on a match, not on the top row.
+        assert host.object_tree.cursor_node in host._tree_filter_matches
+
+    def test_enter_takes_the_highlighted_row(self):
+        host = _MultiDbFilterHost("server", ["sales"], {"sales": ["orders", "order_lines"]})
+        self._open_filter(host)
+        self._type(host, "order")
+        second = host._tree_filter_matches[1]
+        # Simulate the user pressing ↓ onto the second match.
+        host.object_tree.move_cursor(second)
+        wanted = second.data.get_label_text()
+
+        TreeFilterMixin.action_tree_filter_accept(host)  # type: ignore[arg-type]
+
+        cursor = host.object_tree.cursor_node
+        assert cursor is not None and host.object_tree.is_node_in_tree(cursor)
+        assert cursor.data.get_label_text() == wanted
+
+    def test_highlight_keeps_display_label(self):
+        host = _MultiDbFilterHost("server", ["sales"], {"sales": ["orders"]})
+        # Add a folder whose display label differs from its searchable text.
+        db = host.object_tree.root.children[0].children[0].children[0]
+        procs = db.add("Stored Procedures", data=FolderNode(folder_type="procedures", database="sales"))
+        procs.allow_expand = True
+
+        self._open_filter(host)
+        self._type(host, "proc")
+
+        match = next(n for n in host._tree_filter_matches if n.data.get_label_text() == "procedures")
+        label = str(match.label)
+        assert label.startswith("Stored "), f"display label was rewritten: {label!r}"
+        plain = re.sub(r"\[[^]]*]", "", label)
+        assert plain == "Stored Procedures", f"highlight changed the text: {plain!r}"
+        assert "[bold" in label

@@ -22,6 +22,7 @@ class TreeFilterActiveState(BlockingState):
         accept_key = resolve_display_key("tree_filter_accept") or "enter"
         left: list[DisplayBinding] = [
             DisplayBinding(key=close_key, label="Close", action="tree_filter_close"),
+            DisplayBinding(key="↑/↓", label="Move", action="tree_filter_move"),
             DisplayBinding(key=accept_key, label="Select", action="tree_filter_accept"),
         ]
         return left, []
