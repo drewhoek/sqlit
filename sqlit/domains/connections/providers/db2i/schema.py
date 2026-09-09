@@ -1,11 +1,11 @@
 """Connection schema for IBM DB2 for i."""
 
 from sqlit.domains.connections.providers.schema_helpers import (
-    FieldType,
-    SelectOption,
     SSH_FIELDS,
     ConnectionSchema,
+    FieldType,
     SchemaField,
+    SelectOption,
     _password_field,
     _port_field,
     _server_field,
@@ -27,6 +27,13 @@ SCHEMA = ConnectionSchema(
         ),
         _username_field(),
         _password_field(),
+        SchemaField(
+            name="libraries",
+            label="Libraries",
+            placeholder="LIB1,LIB2",
+            required=False,
+            description=("Comma-separated libraries to show in the explorer and add to the library list (empty = every non-Q library)"),
+        ),
         SchemaField(
             name="odbc_driver",
             label="ODBC Driver Name",
